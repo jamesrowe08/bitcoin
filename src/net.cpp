@@ -2059,6 +2059,8 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
     AssertLockNotHeld(m_total_bytes_sent_mutex);
 
     for (CNode* pnode : nodes) {
+        PNodeMeasurement measurement(std::chrono::steady_clock::now(), pnode);
+        
         if (interruptNet)
             return;
 
@@ -3330,6 +3332,22 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
 
     return true;
 }
+
+class PNodeMeasurement
+{
+public:
+    PNodeMeasurement(std::chrono::steady_clock::time_point startTime, CNode* pnode) : start_time(startTime), pnode(pnode) {};
+
+    ~PNodeMeasurement()
+    {
+        auto end_time = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+    }
+
+private:
+    std::chrono::steady_clock::time_point start_time;
+    CNode* pnode;
+};
 
 class CNetCleanup
 {
