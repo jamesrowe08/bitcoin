@@ -645,6 +645,7 @@ void CNode::CopyStats(CNodeStats& stats)
     stats.addrLocal = addrLocalUnlocked.IsValid() ? addrLocalUnlocked.ToStringAddrPort() : "";
 
     X(m_conn_type);
+    X(m_cpu_time_history);
 }
 #undef X
 
@@ -2053,13 +2054,35 @@ void CConnman::SocketHandler()
     SocketHandlerListening(events_per_sock);
 }
 
+class PNodeMeasurement
+{
+public:
+    PNodeMeasurement(std::chrono::steady_clock::time_point startTime, CNode* pnode) : start_time(startTime), pnode(pnode) {};
+
+    ~PNodeMeasurement()
+    {
+        auto end_time = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        pnode->AddCPUTimeTaken(duration, error);
+    }
+
+    void measureError() {
+        error = true;
+    }
+
+private:
+    std::chrono::steady_clock::time_point start_time;
+    CNode* pnode;
+    bool error;
+};
+
 void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
                                       const Sock::EventsPerSock& events_per_sock)
 {
     AssertLockNotHeld(m_total_bytes_sent_mutex);
 
     for (CNode* pnode : nodes) {
-        PNodeMeasurement measurement(std::chrono::steady_clock::now(), pnode);
+        auto measurement = PNodeMeasurement(std::chrono::steady_clock::now(), pnode);
         
         if (interruptNet)
             return;
@@ -2135,6 +2158,7 @@ void CConnman::SocketHandlerConnected(const std::vector<CNode*>& nodes,
             else if (nBytes < 0)
             {
                 // error
+                measurement.measureError();
                 int nErr = WSAGetLastError();
                 if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS)
                 {
@@ -3332,22 +3356,6 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
 
     return true;
 }
-
-class PNodeMeasurement
-{
-public:
-    PNodeMeasurement(std::chrono::steady_clock::time_point startTime, CNode* pnode) : start_time(startTime), pnode(pnode) {};
-
-    ~PNodeMeasurement()
-    {
-        auto end_time = std::chrono::steady_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-    }
-
-private:
-    std::chrono::steady_clock::time_point start_time;
-    CNode* pnode;
-};
 
 class CNetCleanup
 {

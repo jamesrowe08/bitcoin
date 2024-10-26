@@ -85,6 +85,10 @@ static const int64_t DEFAULT_PEER_CONNECT_TIMEOUT = 60;
 static const int NUM_FDS_MESSAGE_CAPTURE = 1;
 /** Interval for ASMap Health Check **/
 static constexpr std::chrono::hours ASMAP_HEALTH_CHECK_INTERVAL{24};
+/** The number of iterations of CPU time we track per node */
+static const int CPU_TIME_HISTORY_LENGTH = 10;
+/** Penalty multiplier for nodes that cause errors */
+static const int CPU_TIME_ERROR_PENALTY = 5;
 
 static constexpr bool DEFAULT_FORCEDNSSEED{false};
 static constexpr bool DEFAULT_DNSSEED{true};
@@ -190,6 +194,7 @@ public:
     std::chrono::seconds m_last_tx_time;
     std::chrono::seconds m_last_block_time;
     std::chrono::seconds m_connected;
+    std::deque<std::chrono::microseconds> m_cpu_time_history;
     std::string m_addr_name;
     int nVersion;
     std::string cleanSubVer;
@@ -735,6 +740,8 @@ public:
 
     const ConnectionType m_conn_type;
 
+    std::deque<std::chrono::microseconds> m_cpu_time_history;
+
     /** Move all messages from the received queue to the processing queue. */
     void MarkReceivedMsgsForProcessing()
         EXCLUSIVE_LOCKS_REQUIRED(!m_msg_process_queue_mutex);
@@ -948,6 +955,14 @@ public:
     void PongReceived(std::chrono::microseconds ping_time) {
         m_last_ping_time = ping_time;
         m_min_ping_time = std::min(m_min_ping_time.load(), ping_time);
+    }
+
+    void AddCPUTimeTaken(std::chrono::microseconds cpu_time, bool has_error) {
+        if (m_cpu_time_history.size() >= CPU_TIME_HISTORY_LENGTH) {
+            m_cpu_time_history.pop_front();
+        }
+
+        m_cpu_time_history.push_back(has_error ? cpu_time * CPU_TIME_ERROR_PENALTY : cpu_time);
     }
 
 private:
