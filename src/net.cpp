@@ -2044,7 +2044,7 @@ void CConnman::SocketHandler()
 class PNodeMeasurement
 {
 public:
-    PNodeMeasurement(std::chrono::steady_clock::time_point startTime, CNode* pnode) : start_time(startTime), pnode(pnode) {};
+    PNodeMeasurement(std::chrono::steady_clock::time_point startTime, CNode* pnode) : start_time(startTime), pnode(pnode){};
 
     ~PNodeMeasurement()
     {
